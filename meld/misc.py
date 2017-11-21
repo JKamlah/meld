@@ -27,7 +27,6 @@ import subprocess
 
 from gi.repository import Gdk
 from gi.repository import GLib
-from gi.repository import GObject
 from gi.repository import Gtk
 from gi.repository import GtkSource
 
@@ -161,6 +160,19 @@ def get_base_style_scheme():
     else:
         gtk_settings = Gtk.Settings.get_default()
         use_dark = gtk_settings.props.gtk_application_prefer_dark_theme
+
+    # As of 3.28, the global dark theme switch is going away.
+    if not use_dark:
+        from meld.sourceview import MeldSourceView
+        stylecontext = MeldSourceView().get_style_context()
+        background_set, rgba = (
+            stylecontext.lookup_color('theme_bg_color'))
+
+        # This heuristic is absolutely dire. I made it up. There's
+        # literally no basis to this.
+        if background_set and rgba.red + rgba.green + rgba.blue < 1.0:
+            use_dark = True
+
     base_scheme_name = (
         MELD_STYLE_SCHEME_DARK if use_dark else MELD_STYLE_SCHEME)
 
@@ -169,18 +181,8 @@ def get_base_style_scheme():
 
     return base_style_scheme
 
+
 base_style_scheme = None
-
-
-def parse_rgba(string):
-    """Parse a string to a Gdk.RGBA across different GTK+ APIs
-
-    Introspection changes broke this API in GTK+ 3.20; this function
-    is just a backwards-compatiblity workaround.
-    """
-    colour = Gdk.RGBA()
-    result = colour.parse(string)
-    return result[1] if isinstance(result, tuple) else colour
 
 
 def colour_lookup_with_fallback(name, attribute):
@@ -204,7 +206,9 @@ def colour_lookup_with_fallback(name, attribute):
             "this is a bad install") % (name, attribute), file=sys.stderr)
         sys.exit(1)
 
-    return parse_rgba(style_attr)
+    colour = Gdk.RGBA()
+    colour.parse(style_attr)
+    return colour
 
 
 def get_common_theme():
@@ -236,7 +240,7 @@ def all_same(lst):
 def shorten_names(*names):
     """Remove redunant parts of a list of names (e.g. /tmp/foo{1,2} -> foo{1,2}
     """
-    # TODO: Update for different path separators
+    # TODO: Update for different path separators and URIs
     prefix = os.path.commonprefix(names)
     prefixslash = prefix.rfind("/") + 1
 
@@ -250,7 +254,7 @@ def shorten_names(*names):
     else:
         if all_same(basenames):
             def firstpart(alist):
-                if len(alist) > 1:
+                if len(alist) > 1 and alist[0]:
                     return "[%s] " % alist[0]
                 else:
                     return ""

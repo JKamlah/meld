@@ -36,7 +36,6 @@ from gi.repository import Gtk
 from . import melddoc
 from . import tree
 from . import misc
-from . import recent
 from .ui import gnomeglade
 from .ui import emblemcellrenderer
 
@@ -45,6 +44,7 @@ from decimal import Decimal
 
 from meld.conf import _
 from meld.misc import all_same
+from meld.recent import RecentType
 from meld.settings import bind_settings, meldsettings, settings
 
 
@@ -219,11 +219,10 @@ class CanonicalListing(object):
     def __init__(self, n, canonicalize=None):
         self.items = collections.defaultdict(lambda: [None] * n)
         self.errors = []
-        if canonicalize is not None:
-            self.canonicalize = canonicalize
-            self.add = self.add_canon
+        self.canonicalize = canonicalize
+        self.add = self.add_simple if canonicalize is None else self.add_canon
 
-    def add(self, pane, item):
+    def add_simple(self, pane, item):
         self.items[item][pane] = item
 
     def add_canon(self, pane, item):
@@ -642,10 +641,11 @@ class DirDiff(melddoc.MeldDoc, gnomeglade.Component):
     def get_comparison(self):
         root = self.model.get_iter_first()
         if root:
-            folders = self.model.value_paths(root)
+            uris = [Gio.File.new_for_path(d)
+                    for d in self.model.value_paths(root)]
         else:
-            folders = []
-        return recent.TYPE_FOLDER, folders
+            uris = []
+        return RecentType.Folder, uris
 
     def recursively_update( self, path ):
         """Recursively update from tree path 'path'.
@@ -1145,8 +1145,8 @@ class DirDiff(melddoc.MeldDoc, gnomeglade.Component):
         if not rows[pane]:
             return
         if os.path.isfile(rows[pane]):
-            self.emit("create-diff", [r for r in rows if os.path.isfile(r)],
-                      {})
+            self.emit("create-diff", [Gio.File.new_for_path(r)
+                      for r in rows if os.path.isfile(r)], {})
         elif os.path.isdir(rows[pane]):
             if view.row_expanded(path):
                 view.collapse_row(path)
@@ -1190,8 +1190,9 @@ class DirDiff(melddoc.MeldDoc, gnomeglade.Component):
 
     def run_diff_from_iter(self, it):
         row_paths = self.model.value_paths(it)
-        paths = [p for p in row_paths if os.path.exists(p)]
-        self.emit("create-diff", paths, {})
+        gfiles = [Gio.File.new_for_path(p)
+                  for p in row_paths if os.path.exists(p)]
+        self.emit("create-diff", gfiles, {})
 
     def on_button_diff_clicked(self, button):
         pane = self._get_focused_pane()
@@ -1466,9 +1467,6 @@ class DirDiff(melddoc.MeldDoc, gnomeglade.Component):
                 idx = 1 if i else 0
                 w.setup(scroll, self.get_state_traversal(idx))
 
-            for w in self.linkmap:
-                w.associate(self)
-
             for widget in (
                     self.vbox[:n] + self.file_toolbar[:n] + self.diffmap[:n] +
                     self.linkmap[:n - 1] + self.dummy_toolbar_linkmap[:n - 1]):
@@ -1557,6 +1555,9 @@ class DirDiff(melddoc.MeldDoc, gnomeglade.Component):
             self._update_item_state( model.get_iter(path) )
         self._update_diffmaps()
         self.force_cursor_recalculate = True
+
+    def on_linkmap_scroll_event(self, linkmap, event):
+        self.next_diff(event.direction)
 
     def next_diff(self, direction):
         if self.focus_pane:

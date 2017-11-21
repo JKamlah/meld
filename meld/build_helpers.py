@@ -113,7 +113,9 @@ class build_help(distutils.cmd.Command):
         if "LINGUAS" in os.environ:
             self.selected_languages = os.environ["LINGUAS"].split()
         else:
-            self.selected_languages = os.listdir(self.help_dir)
+            self.selected_languages = [
+                d for d in os.listdir(self.help_dir) if os.path.isdir(d)
+            ]
 
         if 'C' not in self.selected_languages:
             self.selected_languages.append('C')
@@ -339,7 +341,7 @@ class build_py(distutils.command.build_py.build_py):
                 options = self.distribution.get_option_dict('install')
                 prefix = options['prefix'][1]
             except KeyError as e:
-                print (e)
+                print(e)
                 prefix = sys.prefix
 
             datadir = os.path.join(prefix, 'share', 'meld')

@@ -34,13 +34,13 @@ from gi.repository import Pango
 
 from meld import melddoc
 from meld import misc
-from meld import recent
 from meld import tree
 from meld import vc
 from meld.ui import gnomeglade
 from meld.ui import vcdialogs
 
 from meld.conf import _
+from meld.recent import RecentType
 from meld.settings import settings, bind_settings
 from meld.vc import _null
 from meld.vc._vc import Entry
@@ -325,7 +325,8 @@ class VcView(melddoc.MeldDoc, gnomeglade.Component):
         self.scheduler.add_task(self.on_treeview_cursor_changed)
 
     def get_comparison(self):
-        return recent.TYPE_VC, [self.location]
+        uris = [Gio.File.new_for_path(self.location)]
+        return RecentType.VersionControl, uris
 
     def recompute_label(self):
         self.label_text = os.path.basename(self.location)
@@ -436,7 +437,7 @@ class VcView(melddoc.MeldDoc, gnomeglade.Component):
 
     def run_diff(self, path):
         if os.path.isdir(path):
-            self.emit("create-diff", [path], {})
+            self.emit("create-diff", [Gio.File.new_for_path(path)], {})
             return
 
         basename = os.path.basename(path)
@@ -492,7 +493,8 @@ class VcView(melddoc.MeldDoc, gnomeglade.Component):
             os.chmod(temp_file, 0o444)
             _temp_files.append(temp_file)
 
-        self.emit("create-diff", diffs, kwargs)
+        self.emit("create-diff",
+                  [Gio.File.new_for_path(d) for d in diffs], kwargs)
 
     def do_popup_treeview_menu(self, widget, event):
         if event:

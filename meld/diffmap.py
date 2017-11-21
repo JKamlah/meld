@@ -32,13 +32,14 @@ class DiffMap(Gtk.DrawingArea):
     def __init__(self):
         Gtk.DrawingArea.__init__(self)
         self.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
+        self._last_allocation = None
         self._scrolladj = None
         self._difffunc = lambda: None
         self._handlers = []
         self._y_offset = 0
         self._h_offset = 0
-        self._scroll_y = 0
-        self._scroll_height = 0
+        self._y_start = 0
+        self._height = 0
         self._setup = False
         self._width = 10
         meldsettings.connect('changed', self.on_setting_changed)
@@ -103,9 +104,14 @@ class DiffMap(Gtk.DrawingArea):
         self.queue_draw()
 
     def on_scrollbar_size_allocate(self, scrollbar, allocation):
+        if self._last_allocation and self._last_allocation.equal(allocation):
+            return
+
+        self._last_allocation = allocation
         translation = scrollbar.translate_coordinates(self, 0, 0)
-        self._scroll_y = translation[1] if translation else 0
-        self._scroll_height = allocation.height
+        _scroll_y = translation[1] if translation else 0
+        self._y_start = _scroll_y + self._y_offset + 1
+        self._height = allocation.height - self._h_offset - 1
         self._width = max(allocation.width, 10)
         self._cached_map = None
         self.queue_resize()
@@ -113,8 +119,7 @@ class DiffMap(Gtk.DrawingArea):
     def do_draw(self, context):
         if not self._setup:
             return
-        height = self._scroll_height - self._h_offset - 1
-        y_start = self._scroll_y + self._y_offset + 1
+        height = self._height
         width = self.get_allocated_width()
         xpad = 2.5
         x0 = xpad
@@ -123,7 +128,7 @@ class DiffMap(Gtk.DrawingArea):
         if not (width > 0 and height > 0):
             return
 
-        context.translate(0, y_start)
+        context.translate(0, self._y_start)
         context.set_line_width(1)
         context.rectangle(x0 - 3, -1, x1 + 6, height + 1)
         context.clip()
@@ -165,9 +170,7 @@ class DiffMap(Gtk.DrawingArea):
 
     def do_button_press_event(self, event):
         if event.button == 1:
-            y_start = self._scroll_y + self._y_offset
-            total_height = self._scroll_height - self._h_offset
-            fraction = (event.y - y_start) / total_height
+            fraction = (event.y - self._y_start) / self._height
 
             adj = self._scrolladj
             val = fraction * adj.get_upper() - adj.get_page_size() / 2

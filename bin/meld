@@ -22,6 +22,11 @@ import os
 import signal
 import subprocess
 import sys
+from multiprocessing import freeze_support
+
+# Main module hasn't multiprocessing workers, so not imported in subprocesses.
+# This allows skipping '__name__ == "main"' guard, but freezed case is special.
+freeze_support()
 
 # On Windows, pythonw.exe (which doesn't display a console window) supplies
 # dummy stdout and stderr streams that silently throw away any output. However,
@@ -173,6 +178,7 @@ def check_requirements():
     gtk_requirement = (3, 14)
     glib_requirement = (2, 36, 0)
     gtksourceview_requirement = (3, 14, 0)
+    pangocairo_requirement = (1, 34)
 
     def missing_reqs(mod, ver, exception=None):
         if isinstance(exception, ImportError):
@@ -192,13 +198,13 @@ def check_requirements():
         from gi.repository import Gtk
         version = (Gtk.get_major_version(), Gtk.get_minor_version())
         assert version >= gtk_requirement
-    except (ImportError, AssertionError) as e:
+    except (ImportError, AssertionError, ValueError) as e:
         missing_reqs("GTK+", gtk_requirement, e)
 
     try:
         from gi.repository import GObject
         assert GObject.glib_version >= glib_requirement
-    except (ImportError, AssertionError) as e:
+    except (ImportError, AssertionError, ValueError) as e:
         missing_reqs("GLib", glib_requirement, e)
 
     try:
@@ -206,8 +212,15 @@ def check_requirements():
         from gi.repository import GtkSource
         # TODO: There is no way to get at GtkSourceView's actual version
         assert hasattr(GtkSource, 'SearchSettings')
-    except (ImportError, AssertionError) as e:
+    except (ImportError, AssertionError, ValueError) as e:
         missing_reqs("GtkSourceView", gtksourceview_requirement, e)
+
+    try:
+        gi.require_version("PangoCairo", "1.0")
+        from gi.repository import PangoCairo
+        # Only check that imports ok; the version is fine since Gtk loaded fine
+    except (ImportError, ValueError) as e:
+        missing_reqs("PangoCairo", pangocairo_requirement, e)
 
 
 def setup_resources():
@@ -347,5 +360,10 @@ if __name__ == '__main__':
         from gi.repository import GLib
         GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT,
                              lambda *args: meld.meldapp.app.quit(), None)
+    if sys.platform == 'win32':
+        # FontConfig on win32 at least with version <= 2.12.6 can cause several
+        # minutes 'hang' during first startup. So use native fonts backend.
+        from gi.repository import PangoCairo
+        PangoCairo.FontMap.set_default(PangoCairo.Win32FontMap())
     status = meld.meldapp.app.run(sys.argv)
     sys.exit(status)

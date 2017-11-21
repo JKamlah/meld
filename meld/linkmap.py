@@ -34,6 +34,7 @@ class LinkMap(Gtk.DrawingArea):
 
     def __init__(self):
         self.filediff = None
+        self.views = []
         meldsettings.connect('changed', self.on_setting_changed)
 
     def associate(self, filediff, left_view, right_view):
@@ -50,7 +51,7 @@ class LinkMap(Gtk.DrawingArea):
             self.fill_colors, self.line_colors = get_common_theme()
 
     def do_draw(self, context):
-        if not self.filediff:
+        if not self.views:
             return
 
         pix_start = [t.get_visible_rect().y for t in self.views]
@@ -67,10 +68,12 @@ class LinkMap(Gtk.DrawingArea):
         context.set_line_width(1.0)
 
         height = allocation.height
-        visible = [self.views[0].get_line_num_for_y(pix_start[0]),
-                   self.views[0].get_line_num_for_y(pix_start[0] + height),
-                   self.views[1].get_line_num_for_y(pix_start[1]),
-                   self.views[1].get_line_num_for_y(pix_start[1] + height)]
+        visible = [
+            self.views[0].get_line_num_for_y(pix_start[0]),
+            self.views[0].get_line_num_for_y(pix_start[0] + height),
+            self.views[1].get_line_num_for_y(pix_start[1]),
+            self.views[1].get_line_num_for_y(pix_start[1] + height),
+        ]
 
         wtotal = allocation.width
         # For bezier control points
@@ -78,8 +81,11 @@ class LinkMap(Gtk.DrawingArea):
         q_rad = math.pi / 2
 
         left, right = self.view_indices
-        view_offset_line = lambda v, l: (self.views[v].get_y_for_line_num(l) -
-                                         pix_start[v] + y_offset[v])
+
+        def view_offset_line(view_idx, line_num):
+            line_start = self.views[view_idx].get_y_for_line_num(line_num)
+            return line_start - pix_start[view_idx] + y_offset[view_idx]
+
         for c in self.filediff.linediffer.pair_changes(left, right, visible):
             # f and t are short for "from" and "to"
             f0, f1 = [view_offset_line(0, l) for l in c[1:3]]
@@ -126,27 +132,10 @@ class LinkMap(Gtk.DrawingArea):
             Gdk.cairo_set_source_rgba(context, self.line_colors[c[0]])
             context.stroke()
 
-    def do_scroll_event(self, event):
-        self.filediff.next_diff(event.direction)
 
-try:
-    LinkMap.set_css_name("link-map")
-except AttributeError:
-    # New API in 3.20
-    pass
+LinkMap.set_css_name("link-map")
 
 
 class ScrollLinkMap(Gtk.DrawingArea):
 
     __gtype_name__ = "ScrollLinkMap"
-
-    def __init__(self):
-        self.melddoc = None
-
-    def associate(self, melddoc):
-        self.melddoc = melddoc
-
-    def do_scroll_event(self, event):
-        if not self.melddoc:
-            return
-        self.melddoc.next_diff(event.direction)

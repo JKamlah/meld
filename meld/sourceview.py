@@ -145,13 +145,13 @@ class MeldSourceView(GtkSource.View):
         self._show_line_numbers = None
 
         buf = MeldBuffer()
-        buf.create_tag("inline")
+        inline_tag = GtkSource.Tag.new("inline")
+        inline_tag.props.draw_spaces = True
+        buf.get_tag_table().add(inline_tag)
         buf.create_tag("dimmed")
         self.set_buffer(buf)
 
         meldsettings.connect('changed', self.on_setting_changed)
-        self.on_setting_changed(meldsettings, 'font')
-        self.on_setting_changed(meldsettings, 'style-scheme')
 
     def get_y_for_line_num(self, line):
         buf = self.get_buffer()
@@ -191,6 +191,8 @@ class MeldSourceView(GtkSource.View):
 
     def do_realize(self):
         bind_settings(self)
+        self.on_setting_changed(meldsettings, 'font')
+        self.on_setting_changed(meldsettings, 'style-scheme')
         return GtkSource.View.do_realize(self)
 
     def do_draw_layer(self, layer, context):
